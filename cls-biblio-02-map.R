@@ -54,7 +54,7 @@ locations_institutions_counts <- locations |>
 
 # some descriptive stats
 top25_institutions <- locations_institutions_counts |>
-  slice(1:26) |> select(institution) |> unlist() |> as.vector()
+  slice(2:26) |> select(institution) |> unlist() |> as.vector()
 
 top25_outside_nijmegen <- locations_institutions_counts |>
   filter(city != "Nijmegen") |>
@@ -101,7 +101,7 @@ network_institutions <- locations_institutions_counts |>
 
 # some desc stats
 unique(network$to)
-unique(locations_simple$country)
+unique(locations$country)
 
 
 # Maps --------------------------------------------------------------------

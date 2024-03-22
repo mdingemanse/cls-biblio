@@ -29,8 +29,63 @@ sum.na <- function(x) sum(x, na.rm = T)
 
 # Load data ---------------------------------------------------------------
 
+# how did we get the data?
+
+
+# QUERY 1: 2018-2023 papers with a "Radboud University Nijmegen" affiliation and
+# additionally a "Centre For Language Studies" affiliation in the Department
+# field:
+# https://www.webofscience.com/wos/woscc/summary/32292d0f-feb3-4906-b96e-0a5ae62f24a6-d78cf0fb/relevance/1
+
+# QUERY 2: 2018-2023 papers with a "Radboud University Nijmegen" affiliation and
+# additionally a "CLS" mention in the Address field:
+# https://www.webofscience.com/wos/woscc/summary/7527056e-4bee-42fc-9d71-842665408eaa-d78ca383/relevance/1
+
+# QUERY 3: same, but with a "Language and Communication, Nijmegen" mention in the Address
+# field:
+# https://www.webofscience.com/wos/woscc/summary/dcd1aa90-3328-4ee4-bb8d-9ed57d101afd-d79219bf/relevance/1
+
+# QUERY 4: same, but with a "Language and Communication" mention in the Address
+# field:
+# https://www.webofscience.com/wos/woscc/summary/dcd1aa90-3328-4ee4-bb8d-9ed57d101afd-d79219bf/relevance/1
+
+
 # get WOS data
-d <- read_tsv("data/cls-wos-export-2024-03-15.txt")
+d1 <- read_tsv("data/cls-wos-query1-20240322.txt")
+d2 <- read_tsv("data/cls-wos-query2-20240322.txt")
+d3 <- read_tsv("data/cls-wos-query3-20240322.txt")
+
+d <- rbind(d1,d2)
+
+# there are 4 duplicates, so query 2 was a good addition
+d |>
+  group_by_all() |>
+  filter(n() >1) |>
+  ungroup()
+
+# adding d3
+d <- rbind(d,d3)
+
+# this adds 15 duplicates but still yields another 10 new papers
+d |>
+  group_by_all() |>
+  filter(n() >1) |>
+  ungroup()
+
+d <- d |>
+  group_by_all() |>
+  slice(1) |>
+  ungroup()
+
+# write a list of papers by CLS authors without CLS affiliation:
+d3.noCLS <- d3 |>
+  filter(!grepl("Language Studies",C1)) |>
+  filter(!grepl("Language Studies",RP)) |>
+  select(AF,TI,SO,DT,C1,C3,RP,EM)
+#View(d3.noCLS)
+
+write_excel_csv(d3.noCLS,"data/cls-papers-without-cls-affiliation.csv")
+
 
 # this being WoS, there are loads of fields. These are the most relevant:
 
@@ -54,7 +109,9 @@ affiliations_separated <- unlist(strsplit(affiliations, "; "))
 # get departments + institutions from the unstructured affiliations string
 institutions <- gsub(",.*","", affiliations_separated)
 
-# alternatively you could get institutions from the C3 field
+# alternatively you could get institutions from the C3 field, but this is much
+# more coarse grained (e.g., will "Max Planck Society" for MPI for Psycholinguistics)
+
 # institutions <- trimws(unlist(strsplit(d$C3, ";")))
 
 # BTW a quick look at the unique entries shows that WOS data is pretty messy,
@@ -65,6 +122,8 @@ sort(unique(institutions))
 countries <- sub(".*?,\\s*(.*?)$", "\\1", affiliations_separated)
 # we probably don't want the postal code in the country name
 countries[str_detect(countries,"USA")] <- "USA"
+countries[str_detect(countries,"Peoples R China")] <- "China"
+
 
 # get cities (and or in some cases provinces, annoyingly)
 cities <- sub(".*?,\\s*(.*?),\\s*[^,]*$", "\\1", affiliations_separated)
@@ -139,6 +198,7 @@ corrections <- list("00101" = "Helsinki",
                     "Nouvelle" = "Paris",
                     "NSW" = "Sydney",
                     "ON" = "Toronto",
+                    "Paso" = "El Paso",
                     "Pk" = "State College",
                     "PL" = "Vitoria",
                     "Pradesh" = "Uttar Pradesh",
@@ -190,17 +250,15 @@ sort(unique(locations$institution))
 
 # get coordinates for cities
 
-# first correct PRC to China so that OSM will correctly geocode Chinese cities
+# city_country helps geocode more accurately
 locations <- locations |>
-  mutate(country = ifelse(country == "Peoples R China", "China", country)) |>
   mutate(city_country = paste(city,country,sep=", "))
 
-# then get unique cities
+# get unique cities
 unique_cities <- sort(unique(locations$city_country))
 
 # and use geocode_OSM to get coordinates (this takes a minute)
-library(tmaptools)
-all_coordinates <- geocode_OSM(unique_cities,as.data.frame=T)
+all_coordinates <- tmaptools::geocode_OSM(unique_cities,as.data.frame=T)
 
 # whip them into lat_lon format and merge with the locations df
 lat_lon <- all_coordinates |>
