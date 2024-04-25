@@ -29,8 +29,10 @@ sum.na <- function(x) sum(x, na.rm = T)
 
 
 
+# Organize datasets -------------------------------------------------------
 
-# Web of Science data, 2018-2023 ------------------------------------------
+
+#* Web of Science data, 2018-2023 ------------------------------------------
 
 
 # how did we get the data?
@@ -124,7 +126,47 @@ only_container_doi <- d |>
 
 write_csv(d, "data/cls-wos-2018_2023.csv")
 
-# DOIs: get most inclusive list -------------------------------------------
+
+#* Altmetric data, 2018-2023 -----------------------------------------------
+
+# How did we get the data? Using a Free Librarian account, downloading the max
+# number of DOIs, and repeating this until the list of DOIs in
+# cls-just_the_dois.txt is exhausted; then merge all.
+
+d.a <- readxl::read_xlsx("data/cls-altmetric-merged.xlsx") |>
+  select(-c("Authors at my Institution","Departments","Journal ISSNs","Handle.net IDs","ISBN","National Clinical Trial ID","URI","PubMedCentral ID","ADS Bibcode","arXiv ID","RePEc ID","SSRN","URN","Google+ mentions","Badge URL")) |>
+  dplyr::rename("altmetric.score" = "Altmetric Attention Score",
+                "title" = "Title",
+                "journal" = "Journal/Collection Title",
+                "type" = "Output Type",
+                "pubdate" = "Publication Date",
+                "doi" = "DOI",
+                "id.pubmed" = "PubMed ID",
+                "news" = "News mentions",
+                "blogs" = "Blog mentions",
+                "policy" = "Policy mentions",
+                "patents" = "Patent mentions",
+                "twitter" = "X mentions",
+                "weibo" = "Weibo mentions",
+                "facebook" = "Facebook mentions",
+                "wikipedia" = "Wikipedia mentions",
+                "linkedin" = "LinkedIn mentions",
+                "reddit" = "Reddit mentions",
+                "pinterest" = "Pinterest mentions",
+                "f1000" = "F1000 mentions",
+                "qa" = "Q&A mentions",
+                "youtube" = "Video mentions",
+                "syllabi" = "Syllabi mentions",
+                "mendeley" = "Number of Mendeley readers",
+                "citations" = "Number of Dimensions citations",
+                "details" = "Details Page URL",
+                "publisher" = "Publisher Names"
+  ) |>
+  mutate(doi = tolower(doi)) # always set DOIs to lowercase
+write_csv(d.a,"data/cls-altmetric.csv")
+
+
+#* DOIs: get most inclusive list -------------------------------------------
 
 # From METIS, hand-curated, we get a first list of DOIs:
 
@@ -175,6 +217,9 @@ doi.all <- unique(unlist(c(doi.metis,doi.wos)))
 
 write(doi.all,file="data/cls-dois_from_metis_and_wos.txt")
 
+
+# * Unpaywall data --------------------------------------------------------
+
 # get unpaywall data
 # actually when I ran this I got a load of "Request failed []]404]" errors
 # d.unpaywall <- roadoi::oadoi_fetch(dois = doi.all,
@@ -190,6 +235,8 @@ d.u <- dplyr::full_join(d.u1,d.u2) |>
 write_csv(d.u,file="data/cls-unpaywall.csv")
 
 
+# * Open data & repositories ----------------------------------------------
+
 # Open data
 
 # How did we get this? Manually looking for papers that mention OSF or Radboud
@@ -198,9 +245,19 @@ write_csv(d.u,file="data/cls-unpaywall.csv")
 d.opendata <- read_csv('data/cls-opendata.csv') |>
   mutate(prop = has_repo/papers_with_dois * 100)
 
+# How did we get the data? Supplied by Henk vd Heuvel, April 15, 2024
+
+d.repos <- readxl::read_xlsx('data/cls-RU-repository-allcollections-2024-04-15_05-43.xlsx')
+
+# make names usable
+names(d.repos) <- sub(" ", "_", tolower(names(d.repos)))
+
+d.repos <- d.repos |>
+  mutate(creation_date = as.POSIXct(creation_date)) |>
+  mutate(year = as.numeric(lubridate::year(creation_date)))
 
 
-# WoS locations and affiliations ------------------------------------------
+#* WoS locations and affiliations ------------------------------------------
 
 
 # get affiliations
@@ -375,50 +432,11 @@ locations <- locations |>
 write_csv(locations,"data/cls-locations_raw.csv")
 
 
-# Altmetric data, 2018-2023 -----------------------------------------------
-
-# How did we get the data? Using a Free Librarian account, downloading the max
-# number of DOIs, and repeating this until the list of DOIs in
-# cls-just_the_dois.txt is exhausted; then merge all.
-
-d.a <- readxl::read_xlsx("data/cls-altmetric-merged.xlsx") |>
-  select(-c("Authors at my Institution","Departments","Journal ISSNs","Handle.net IDs","ISBN","National Clinical Trial ID","URI","PubMedCentral ID","ADS Bibcode","arXiv ID","RePEc ID","SSRN","URN","Google+ mentions","Badge URL")) |>
-  dplyr::rename("altmetric.score" = "Altmetric Attention Score",
-                "title" = "Title",
-                "journal" = "Journal/Collection Title",
-                "type" = "Output Type",
-                "pubdate" = "Publication Date",
-                "doi" = "DOI",
-                "id.pubmed" = "PubMed ID",
-                "news" = "News mentions",
-                "blogs" = "Blog mentions",
-                "policy" = "Policy mentions",
-                "patents" = "Patent mentions",
-                "twitter" = "X mentions",
-                "weibo" = "Weibo mentions",
-                "facebook" = "Facebook mentions",
-                "wikipedia" = "Wikipedia mentions",
-                "linkedin" = "LinkedIn mentions",
-                "reddit" = "Reddit mentions",
-                "pinterest" = "Pinterest mentions",
-                "f1000" = "F1000 mentions",
-                "qa" = "Q&A mentions",
-                "youtube" = "Video mentions",
-                "syllabi" = "Syllabi mentions",
-                "mendeley" = "Number of Mendeley readers",
-                "citations" = "Number of Dimensions citations",
-                "details" = "Details Page URL",
-                "publisher" = "Publisher Names"
-                ) |>
-  mutate(doi = tolower(doi)) # always set DOIs to lowercase
-write_csv(d.a,"data/cls-altmetric.csv")
 
 
+# Analyses ----------------------------------------------------------------
 
-
-# Unpaywall data, 2018-2023 -----------------------------------------------
-
-# How did we get the data? Feed DOIs to the Unpaywall API
+#* Open access and open science -----------------------------------------------
 
 d.u |>
   group_by(genre) |>
@@ -429,6 +447,10 @@ d.u |>
 d.p <- d.u |>
   drop_na(year) |>
   filter(year > 2017 & year < 2024) |>
+  mutate(type = case_when(
+    genre %in% c("proceedings","proceedings-article","posted-content") ~ "proceedings",
+    .default = as.character(genre)
+  )) |>
   mutate(open = ifelse(oa_status == "closed","closed","open")) |>
   mutate(oa_status = ordered(oa_status, levels=c("closed","gold","bronze","green","hybrid"))) |>
   mutate(oa_status_simpler =
@@ -448,7 +470,7 @@ d.p |>
   ggplot(aes(x=year,fill=oa_status_simpler)) +
   theme_economist() +
   theme(plot.title.position = "plot") +
-  ggtitle("Open access status") +
+  ggtitle("A. Open access status") +
   labs(x="year",y="", fill="") +
   geom_bar(position="fill") 
 p1 <- last_plot()
@@ -458,28 +480,67 @@ d.opendata |>
   ggplot(aes(x=year,y=prop)) +
   theme_economist() +
   theme(plot.title.position = "plot") +
-  ggtitle("Open science trends") +
+  ggtitle("B. Open science trends") +
   ylim(0,20) +
   labs(x="year",y="% of papers with open data or code") +
   geom_line()
 p2 <- last_plot()
   
-cowplot::plot_grid(p1,p2)
-ggsave('figures/panel_openscience.png',width=8,height=4,bg="white")
 
-d.p |> 
-  ggplot(aes(x=year,fill=open)) +
+d.repos |>
+  filter(year != 2024) |>
+  ggplot(aes(x=year)) +
   theme_economist() +
+  ggtitle("C. Repository deposits") + 
+  xlim(c(2018,2024)) +
+  labs(x="year",y="number of deposits") + 
   geom_bar()
+p3 <- last_plot()
 
-d.p |> 
-  ggplot(aes(x=year,fill=open)) +
-  ggtitle("Open Access status of CLS publications") +
-  theme_economist() +
-  geom_bar(position="fill")
 
-d.p |> 
-  ggplot(aes(x=year,fill=open)) +
-  ggtitle("Open Access status of CLS publications") +
-  theme_economist() +
-  geom_bar(position="fill")
+cowplot::plot_grid(p1,p2,p3,nrow=1)
+ggsave('figures/panel_openscience.png',width=12,height=4,bg="white")
+
+# what is the year on year increase in repositories?
+d.repos |>
+  group_by(year) |>
+  dplyr::summarise(n=n(),
+                   views=sum(views),
+                   downloads=sum(downloads),
+                   viewers=sum(viewers),
+                   downloaders=sum(downloaders))
+
+
+d.repos |>
+  group_by(year) |>
+  dplyr::summarise(views=sum(views),downloads=sum(downloads),viewers,downloaders)
+
+
+#* Altmetric data --------------------------------------------------------
+
+d.a |>
+  mutate(year = lubridate::year(pubdate)) |>
+  filter(altmetric.score > 0,
+         year %in% c(2018:2023)) |>
+  group_by(year) |>
+  dplyr::summarise(altmetric=sum(altmetric.score),
+                   news=sum(news),
+                   wikipedia=sum(wikipedia),
+                   ref=sum(mendeley),
+                   cites=sum(citations))
+
+# do Mendeley saves predict cites?
+d.a.cites <- d.a |>
+  mutate(year = lubridate::year(pubdate)) |>
+  filter(year %in% c(2018:2023)) |>
+  select(year,doi,mendeley,citations) |>
+  arrange(desc(mendeley))
+
+cor.test(d.a.cites$mendeley,d.a.cites$citations)
+
+cor.test(d.a.cites$mendeley,d.a.cites$citations)
+
+d.a.cites |>
+  group_by(year) |>
+  dplyr::summarise(r=cor.test(mendeley,citations)$estimate)
+                   
