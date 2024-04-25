@@ -35,7 +35,7 @@ sum.na <- function(x) sum(x, na.rm = T)
 
 # Load data ---------------------------------------------------------------
 
-locations.raw <- read_csv("data/locations_raw.csv")
+locations.raw <- read_csv("data/cls-locations_raw.csv")
 
 # simplify df and create one that has counts
 locations <- locations.raw |>

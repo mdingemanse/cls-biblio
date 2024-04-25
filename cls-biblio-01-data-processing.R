@@ -10,7 +10,9 @@ list.of.packages <- c("tidyverse",
                       "dimensionsR",
                       "pubmedR",
                       "rscopus",
-                      "tmaptools")
+                      "tmaptools",
+                      "roadoi",
+                      "ggthemes")
 new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
 lapply(list.of.packages, require, character.only=T)
@@ -27,7 +29,9 @@ sum.na <- function(x) sum(x, na.rm = T)
 
 
 
-# Load data ---------------------------------------------------------------
+
+# Web of Science data, 2018-2023 ------------------------------------------
+
 
 # how did we get the data?
 
@@ -48,7 +52,8 @@ sum.na <- function(x) sum(x, na.rm = T)
 # QUERY 4: same, but with a "Language and Communication" mention in the Address
 # field:
 # https://www.webofscience.com/wos/woscc/summary/dcd1aa90-3328-4ee4-bb8d-9ed57d101afd-d79219bf/relevance/1
-
+# this query didn't deliver anything we did not already have and adds a few
+# non-CLS papers, so not using it below
 
 # get WOS data
 d1 <- read_tsv("data/cls-wos-query1-20240322.txt")
@@ -57,7 +62,7 @@ d3 <- read_tsv("data/cls-wos-query3-20240322.txt")
 
 d <- rbind(d1,d2)
 
-# there are 4 duplicates, so query 2 was a good addition
+# there are only 4 duplicates, so query 2 was a good addition
 d |>
   group_by_all() |>
   filter(n() >1) |>
@@ -77,7 +82,8 @@ d <- d |>
   slice(1) |>
   ungroup()
 
-# write a list of papers by CLS authors without CLS affiliation:
+# For quality control, write a list of papers by CLS authors without CLS
+# affiliation:
 d3.noCLS <- d3 |>
   filter(!grepl("Language Studies",C1)) |>
   filter(!grepl("Language Studies",RP)) |>
@@ -85,6 +91,12 @@ d3.noCLS <- d3 |>
 #View(d3.noCLS)
 
 write_excel_csv(d3.noCLS,"data/cls-papers-without-cls-affiliation.csv")
+
+# upon inspection there's only one here that really doesn't belong (as in,
+# having no authors that were at any point affiliated with CLS)
+d <- d |>
+  filter(AF != "Pika, Simone; Wilkinson, Ray; Kendrick, Kobin H.; Vernes, Sonja C.")
+
 
 
 # this being WoS, there are loads of fields. These are the most relevant:
@@ -95,7 +107,100 @@ write_excel_csv(d3.noCLS,"data/cls-papers-without-cls-affiliation.csv")
 # RP corresponding author
 # OI ORCIDs (if known)
 # FU funding project 
-# FP funding partner 
+# FP funding partner
+# DI doi (can be empty if monograph, in which case see D2)
+# D2 doi of container
+
+# set doi to lowercase across the board
+d <- d |>
+  mutate(DI = tolower(DI),
+         D2 = tolower(D2))
+
+# I considered setting DI to D2 if DI=NA and D2 has a value, but this affects
+# only 6 items, one of which is then a book attributed wrongly to CLS
+only_container_doi <- d |>
+  filter(!is.na(D2) & is.na(DI))
+
+
+write_csv(d, "data/cls-wos-2018_2023.csv")
+
+# DOIs: get most inclusive list -------------------------------------------
+
+# From METIS, hand-curated, we get a first list of DOIs:
+
+doi.metis <- read_csv("data/cls-just_the_dois.txt",col_names = "doi") |>
+  mutate(doi = tolower(doi)) |> unique()
+
+# take the most inclusive set of DOIs from WOS, remove duplicates, set to
+# lowercase
+doi.wos <- d |>
+  select(DI) |> unique() |> drop_na() |>
+  dplyr::rename(doi = DI)
+
+
+in_wos_notin_metis <- setdiff(doi.wos, doi.metis)
+in_metis_notin_wos <- setdiff(doi.metis,doi.wos)
+
+write_csv(in_wos_notin_metis,"data/cls-dois_in_wos_notin_metis.txt")
+
+
+# What is in WoS but not in Metis? quick inspection in Zotero shows that many of
+# these apparently *are* in metis, so the doi export from metis was somehow not
+# complete.
+
+# e.g., the following dois don't appear in the cls-just_the_dois.txt but they
+# are actually in the metis output; something must have gone wrong in the
+# reduction of that RIS file to just DOIs.
+check_these_dois <- c("10.1075/celcr.22.01nac",
+                      "10.1075/celcr.22.03nac",
+                      "10.1075/celcr.22.04rei",
+                      "10.1515/9783110730081-016",
+                      "10.1007/978-3-319-78771-8_20",
+                      "10.1016/j.jpsychores.2019.03.031",
+                      "10.1017/s1366728917000116",
+                      "10.1007/978-3-319-75487-1_28",
+                      "10.4324/9780429199691-13",
+                      "10.1007/978-3-319-69830-4_3", # this one?
+                      "10.3389/fnhum.2019.00398",
+                      "10.1109/icassp43922.2022.9747785",
+                      )
+
+d |>
+  filter(DI %in% check_these_dois) %>%
+  select(AU,DI) %>% arrange(DI)
+
+# anyway, it's useful to have an inclusive list of DOIs
+
+doi.all <- unique(unlist(c(doi.metis,doi.wos)))
+
+write(doi.all,file="data/cls-dois_from_metis_and_wos.txt")
+
+# get unpaywall data
+# actually when I ran this I got a load of "Request failed []]404]" errors
+# d.unpaywall <- roadoi::oadoi_fetch(dois = doi.all,
+#                     email = "mark.dingemanse@ru.nl",
+#                     .progress = "text",
+#                     .flatten = TRUE)
+
+d.u1 <- read_csv("data/cls-unpaywall-batch1.csv")
+d.u2 <- read_csv("data/cls-unpaywall-batch2.csv")
+d.u <- dplyr::full_join(d.u1,d.u2) |>
+  mutate(year = ifelse(is.na(published_date),NA,str_extract(published_date, "^\\d{4}")))
+
+write_csv(d.u,file="data/cls-unpaywall.csv")
+
+
+# Open data
+
+# How did we get this? Manually looking for papers that mention OSF or Radboud
+# Repository datasets or code on github
+
+d.opendata <- read_csv('data/cls-opendata.csv') |>
+  mutate(prop = has_repo/papers_with_dois * 100)
+
+
+
+# WoS locations and affiliations ------------------------------------------
 
 
 # get affiliations
@@ -267,4 +372,114 @@ lat_lon <- all_coordinates |>
 locations <- locations |>
   left_join(lat_lon,by="city_country",relationship="many-to-many")
 
-write_csv(locations,"data/locations_raw.csv")
+write_csv(locations,"data/cls-locations_raw.csv")
+
+
+# Altmetric data, 2018-2023 -----------------------------------------------
+
+# How did we get the data? Using a Free Librarian account, downloading the max
+# number of DOIs, and repeating this until the list of DOIs in
+# cls-just_the_dois.txt is exhausted; then merge all.
+
+d.a <- readxl::read_xlsx("data/cls-altmetric-merged.xlsx") |>
+  select(-c("Authors at my Institution","Departments","Journal ISSNs","Handle.net IDs","ISBN","National Clinical Trial ID","URI","PubMedCentral ID","ADS Bibcode","arXiv ID","RePEc ID","SSRN","URN","Google+ mentions","Badge URL")) |>
+  dplyr::rename("altmetric.score" = "Altmetric Attention Score",
+                "title" = "Title",
+                "journal" = "Journal/Collection Title",
+                "type" = "Output Type",
+                "pubdate" = "Publication Date",
+                "doi" = "DOI",
+                "id.pubmed" = "PubMed ID",
+                "news" = "News mentions",
+                "blogs" = "Blog mentions",
+                "policy" = "Policy mentions",
+                "patents" = "Patent mentions",
+                "twitter" = "X mentions",
+                "weibo" = "Weibo mentions",
+                "facebook" = "Facebook mentions",
+                "wikipedia" = "Wikipedia mentions",
+                "linkedin" = "LinkedIn mentions",
+                "reddit" = "Reddit mentions",
+                "pinterest" = "Pinterest mentions",
+                "f1000" = "F1000 mentions",
+                "qa" = "Q&A mentions",
+                "youtube" = "Video mentions",
+                "syllabi" = "Syllabi mentions",
+                "mendeley" = "Number of Mendeley readers",
+                "citations" = "Number of Dimensions citations",
+                "details" = "Details Page URL",
+                "publisher" = "Publisher Names"
+                ) |>
+  mutate(doi = tolower(doi)) # always set DOIs to lowercase
+write_csv(d.a,"data/cls-altmetric.csv")
+
+
+
+
+# Unpaywall data, 2018-2023 -----------------------------------------------
+
+# How did we get the data? Feed DOIs to the Unpaywall API
+
+d.u |>
+  group_by(genre) |>
+  summarise(n=n())
+
+#plottable df
+
+d.p <- d.u |>
+  drop_na(year) |>
+  filter(year > 2017 & year < 2024) |>
+  mutate(open = ifelse(oa_status == "closed","closed","open")) |>
+  mutate(oa_status = ordered(oa_status, levels=c("closed","gold","bronze","green","hybrid"))) |>
+  mutate(oa_status_simpler =
+           case_when(
+             oa_status == "closed" ~ "closed",
+             oa_status %in% c("gold","hybrid") ~ "open",
+             oa_status %in% c("bronze","green") ~ "green",
+             .default = as.character(oa_status)
+           ))
+  
+
+d.u |>
+  drop_na(year) |>
+  filter()
+
+d.p |>
+  ggplot(aes(x=year,fill=oa_status_simpler)) +
+  theme_economist() +
+  theme(plot.title.position = "plot") +
+  ggtitle("Open access status") +
+  labs(x="year",y="", fill="") +
+  geom_bar(position="fill") 
+p1 <- last_plot()
+
+
+d.opendata |>
+  ggplot(aes(x=year,y=prop)) +
+  theme_economist() +
+  theme(plot.title.position = "plot") +
+  ggtitle("Open science trends") +
+  ylim(0,20) +
+  labs(x="year",y="% of papers with open data or code") +
+  geom_line()
+p2 <- last_plot()
+  
+cowplot::plot_grid(p1,p2)
+ggsave('figures/panel_openscience.png',width=8,height=4,bg="white")
+
+d.p |> 
+  ggplot(aes(x=year,fill=open)) +
+  theme_economist() +
+  geom_bar()
+
+d.p |> 
+  ggplot(aes(x=year,fill=open)) +
+  ggtitle("Open Access status of CLS publications") +
+  theme_economist() +
+  geom_bar(position="fill")
+
+d.p |> 
+  ggplot(aes(x=year,fill=open)) +
+  ggtitle("Open Access status of CLS publications") +
+  theme_economist() +
+  geom_bar(position="fill")
