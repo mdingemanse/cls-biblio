@@ -8,9 +8,6 @@
 list.of.packages <- c("tidyverse",
                       "bibliometrix",
                       "openalexR",
-                      "dimensionsR",
-                      "pubmedR",
-                      "rscopus",
                       "tmaptools",
                       "roadoi",
                       "ggthemes")
@@ -31,6 +28,8 @@ d.opendata <- read_csv('data/cls-opendata.csv') |>
 d.repos <- read_csv('data/cls-repos.csv')
 
 d.a <- read.csv( 'data/cls-altmetric.csv')
+
+d.dimensions <- readxl::read_excel('data/cls-Dimensions-Publication-2024-03-04_11-17-50.xlsx')
 
 # Analyses ----------------------------------------------------------------
 
@@ -135,9 +134,30 @@ d.repos |>
   dplyr::summarise(views=sum(views),downloads=sum(downloads),viewers,downloaders)
 
 
-#* Altmetric data --------------------------------------------------------
+# *Dimensions data --------------------------------------------------------
+
+# We use the subset of CLS articles identified through Dimensions for a citation
+# analysis. Note that Dimensions uses CrossRef-supplied citations, likely
+# undercounting citations relatively to for instance Google Scholar.
+
+# We find that after one to two years, at least 90 of CLS articles in Dimensions
+# is already cited at least once. This climbs up to 99% after five years,
+# meaning that most CLS research *included in Dimensions* ends up having impact
+# in terms of citations.
+
+d.d <- d.dimensions |>
+  mutate(cited = ifelse(`Times cited` > 0,1,0)) 
+
+d.d |>
+  group_by(PubYear) |>
+  dplyr::summarise(n=n(),
+                   prop_cited=sum(cited)/n,
+                   citations=sum(`Times cited`),
+                   max_cited=max.na(`Times cited`),
+                   median_cited=median.na(`Times cited`))
 
 
+# *Altmetric data --------------------------------------------------------
 
 d.a |>
   mutate(year = lubridate::year(pubdate)) |>
