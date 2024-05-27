@@ -17,16 +17,7 @@ new.packages <- list.of.packages[!(list.of.packages %in% installed.packages()[,"
 if(length(new.packages)) install.packages(new.packages)
 lapply(list.of.packages, require, character.only=T)
 
-
-# smol things
-`%notin%` <- function(x,y) !(x %in% y) 
-mean.na <- function(x) mean(x, na.rm = T)
-median.na <- function(x) median(x, na.rm= T)
-min.na <- function(x) min(x, na.rm = T)
-max.na <- function(x) max(x, na.rm = T)
-sd.na <- function(x) sd(x, na.rm = T)
-sum.na <- function(x) sum(x, na.rm = T)
-
+source('helper-functions.R')
 
 
 # Organize datasets -------------------------------------------------------
@@ -232,7 +223,39 @@ d.u2 <- read_csv("data/cls-unpaywall-batch2.csv")
 d.u <- dplyr::full_join(d.u1,d.u2) |>
   mutate(year = ifelse(is.na(published_date),NA,str_extract(published_date, "^\\d{4}")))
 
+# manually correct openly available proceedings
+
+open_publishers <- c("ISCA")
+
+
+# import manual diamond access classification
+d.u.diamond <- readxl::read_excel("data/cls-unpaywall-results.xlsx")
+
+diamond_venues <- d.u.diamond |>
+  filter(oa_diamond == TRUE) |>
+  select(journal_issns,journal_name,publisher) |>
+  distinct() |> arrange(journal_name)
+
+# TO DO: look critically at whether this is the best implementation
+# probably should be matched on both journal name and publisher 
+d.u <- d.u |>
+  mutate(oa_status_d = ifelse(journal_name %in% diamond_venues$journal_name,"diamond",oa_status))
+
 write_csv(d.u,file="data/cls-unpaywall.csv")
+
+
+# Dimensions data ---------------------------------------------------------
+
+# How did we get this data? Using the following slightly involved query: 
+# https://app.dimensions.ai/analytics/publication/author/vosviewer?search_mode=content&search_text=%22centre%20for%20language%20studies%22&search_type=kws&search_field=full_search&or_facet_year=2023&or_facet_year=2022&or_facet_year=2021&or_facet_year=2020&
+
+# The downside of this query is that we find only articles that somewhere in
+# their fulltext say "Centre for Language Studies".
+ 
+# Dimensions also offers an API but I have failed to receive access despite
+# multiple requests.
+
+d.d <- readxl::read_excel("data/cls-Dimensions-Publication-2024-03-04_11-17-50.xlsx")
 
 
 # * Open data & repositories ----------------------------------------------
@@ -255,7 +278,7 @@ names(d.repos) <- sub(" ", "_", tolower(names(d.repos)))
 d.repos <- d.repos |>
   mutate(creation_date = as.POSIXct(creation_date)) |>
   mutate(year = as.numeric(lubridate::year(creation_date)))
-
+write.csv(d.repos, "data/cls-repos.csv")
 
 #* WoS locations and affiliations ------------------------------------------
 
@@ -432,115 +455,3 @@ locations <- locations |>
 write_csv(locations,"data/cls-locations_raw.csv")
 
 
-
-
-# Analyses ----------------------------------------------------------------
-
-#* Open access and open science -----------------------------------------------
-
-d.u |>
-  group_by(genre) |>
-  summarise(n=n())
-
-#plottable df
-
-d.p <- d.u |>
-  drop_na(year) |>
-  filter(year > 2017 & year < 2024) |>
-  mutate(type = case_when(
-    genre %in% c("proceedings","proceedings-article","posted-content") ~ "proceedings",
-    .default = as.character(genre)
-  )) |>
-  mutate(open = ifelse(oa_status == "closed","closed","open")) |>
-  mutate(oa_status = ordered(oa_status, levels=c("closed","gold","bronze","green","hybrid"))) |>
-  mutate(oa_status_simpler =
-           case_when(
-             oa_status == "closed" ~ "closed",
-             oa_status %in% c("gold","hybrid") ~ "open",
-             oa_status %in% c("bronze","green") ~ "green",
-             .default = as.character(oa_status)
-           ))
-  
-
-d.u |>
-  drop_na(year) |>
-  filter()
-
-d.p |>
-  ggplot(aes(x=year,fill=oa_status_simpler)) +
-  theme_economist() +
-  theme(plot.title.position = "plot") +
-  ggtitle("A. Open access status") +
-  labs(x="year",y="", fill="") +
-  geom_bar(position="fill") 
-p1 <- last_plot()
-
-
-d.opendata |>
-  ggplot(aes(x=year,y=prop)) +
-  theme_economist() +
-  theme(plot.title.position = "plot") +
-  ggtitle("B. Open science trends") +
-  ylim(0,20) +
-  labs(x="year",y="% of papers with open data or code") +
-  geom_line()
-p2 <- last_plot()
-  
-
-d.repos |>
-  filter(year != 2024) |>
-  ggplot(aes(x=year)) +
-  theme_economist() +
-  ggtitle("C. Repository deposits") + 
-  xlim(c(2018,2024)) +
-  labs(x="year",y="number of deposits") + 
-  geom_bar()
-p3 <- last_plot()
-
-
-cowplot::plot_grid(p1,p2,p3,nrow=1)
-ggsave('figures/panel_openscience.png',width=12,height=4,bg="white")
-
-# what is the year on year increase in repositories?
-d.repos |>
-  group_by(year) |>
-  dplyr::summarise(n=n(),
-                   views=sum(views),
-                   downloads=sum(downloads),
-                   viewers=sum(viewers),
-                   downloaders=sum(downloaders))
-
-
-d.repos |>
-  group_by(year) |>
-  dplyr::summarise(views=sum(views),downloads=sum(downloads),viewers,downloaders)
-
-
-#* Altmetric data --------------------------------------------------------
-
-d.a |>
-  mutate(year = lubridate::year(pubdate)) |>
-  filter(altmetric.score > 0,
-         year %in% c(2018:2023)) |>
-  group_by(year) |>
-  dplyr::summarise(altmetric=sum(altmetric.score),
-                   news=sum(news),
-                   wikipedia=sum(wikipedia),
-                   ref=sum(mendeley),
-                   cites=sum(citations))
-
-# do Mendeley saves predict cites?
-d.a.cites <- d.a |>
-  mutate(year = lubridate::year(pubdate)) |>
-  filter(year %in% c(2018:2023)) |>
-  select(year,doi,mendeley,citations) |>
-  arrange(desc(mendeley))
-
-cor.test(d.a.cites$mendeley,d.a.cites$citations)
-
-cor.test(d.a.cites$mendeley,d.a.cites$citations)
-
-d.a.cites |>
-  group_by(year) |>
-  dplyr::summarise(r=cor.test(mendeley,citations)$estimate)
-                   
