@@ -141,7 +141,7 @@ network %>%
                   label.size=NA,
                   fill= alpha(c("white"),0.5),
                   max.overlaps = 20) 
-ggsave("cls-network-world.png",width=12,height=6,bg="white")
+ggsave("figures/cls-network-world.png",width=12,height=6,bg="white")
 
 # generate an empty canvas that can be used for animating a slide
 network %>%
@@ -192,7 +192,7 @@ network.europe |>
                   aes(label=to),
                   min.segment.length = 40,
                   max.overlaps = 10)
-ggsave("cls-network-europe.png",width=12,height=6.7555,bg="white")
+ggsave("figures/cls-network-europe.png",width=12,height=6.7555,bg="white")
 
 
 crop_northernEU <- list(lat = c(47,57),  # lat = y
@@ -220,7 +220,7 @@ network_institutions.europe |>
   geom_text_repel(aes(label=to),
                   min.segment.length = 20,
                   max.overlaps = Inf)
-ggsave("cls-network-institutions_europe.png",width=12,height=6.7555,bg="white")
+ggsave("figures/cls-network-institutions_europe.png",width=12,height=6.7555,bg="white")
 
 
 # Experimental: network on globe ------------------------------------------
@@ -246,7 +246,7 @@ network %>%
                colour="#730e04") 
 # geom_text_repel(aes(label=to),
 #                 max.overlaps = 50)
-ggsave("cls-network-globe.png",width=12,height=12,bg="white")
+ggsave("figures/cls-network-globe.png",width=12,height=12,bg="white")
 
 
 
@@ -268,7 +268,7 @@ network_institutions %>%
              colour="#730e04") +
   geom_text_repel(aes(label=institution),
                   min.segment.length = 10)
-ggsave("cls-network-institutions-world.png",width=12,height=6,bg="white")
+ggsave("figures/cls-network-institutions-world.png",width=12,height=6,bg="white")
 
 # or with only the top 25
 # this needs work consolidating spelling variants etc.
