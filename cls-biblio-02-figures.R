@@ -6,8 +6,8 @@
 # Packages and useful functions -------------------------------------------
 
 list.of.packages <- c("tidyverse",
-                      "bibliometrix",
-                      "openalexR",
+                      #"bibliometrix",
+                      #"openalexR",
                       "tmaptools",
                       "roadoi",
                       "ggthemes")
@@ -30,6 +30,9 @@ d.repos <- read_csv('data/cls-repos.csv')
 d.a <- read.csv( 'data/cls-altmetric.csv')
 
 d.dimensions <- readxl::read_excel('data/cls-Dimensions-Publication-2024-03-04_11-17-50.xlsx')
+
+
+
 
 # Analyses ----------------------------------------------------------------
 
@@ -74,29 +77,18 @@ d.u |>
 
 d.p |>
   ggplot(aes(x=year,fill=oa_status_simpler)) +
-  theme_economist() +
+  theme_economist() + theme(plot.background = element_blank()) +
   theme(plot.title.position = "plot") +
   ggtitle("A. Open access status") +
   labs(x="year",y="", fill="") +
+  scale_fill_manual(values = c(c_ladybug,"green3","green4")) +
   geom_bar(position="fill") 
 p1 <- last_plot()
 
 
-d.p |>
-  ggplot(aes(x=year,fill=oa_status_simpler_d)) +
-  theme_economist() +
-  theme(plot.title.position = "plot") +
-  ggtitle("Open access status by publication type") +
-  labs(x="year",y="", fill="") +
-  scale_fill_manual(values = c("indianred","green1","green3","green4")) +
-  geom_bar() +
-  facet_wrap(~ type)
-ggsave('figures/panel_oa_by_type.png',width=12,height=4,bg="white")
-
-
 d.opendata |>
   ggplot(aes(x=year,y=prop)) +
-  theme_economist() +
+  theme_economist() + theme(plot.background = element_blank()) +
   theme(plot.title.position = "plot") +
   ggtitle("B. Open science trends") +
   ylim(0,20) +
@@ -108,7 +100,7 @@ p2 <- last_plot()
 d.repos |>
   filter(year != 2024) |>
   ggplot(aes(x=year)) +
-  theme_economist() +
+  theme_economist() + theme(plot.background = element_blank()) +
   ggtitle("C. Repository deposits") + 
   xlim(c(2018,2024)) +
   labs(x="year",y="number of deposits") + 
@@ -118,6 +110,20 @@ p3 <- last_plot()
 
 cowplot::plot_grid(p1,p2,p3,nrow=1)
 ggsave('figures/panel_openscience.png',width=12,height=4,bg="white")
+
+# OA by type in more detail, for appendix
+d.p |>
+  ggplot(aes(x=year,fill=oa_status_simpler_d)) +
+  theme_economist() + theme(plot.background = element_blank()) +
+  theme(plot.title.position = "plot") +
+  ggtitle("Open access status by publication type") +
+  labs(x="year",y="", fill="") +
+  scale_fill_manual(values = c(c_ladybug,"green1","green3","green4")) +
+  geom_bar() +
+  facet_wrap(~ type)
+ggsave('figures/panel_oa_by_type.png',width=12,height=4,bg="white")
+
+
 
 # what is the year on year increase in repositories?
 d.repos |>
