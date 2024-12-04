@@ -20,7 +20,3 @@ CLS network in Europe, based on co-authored publications. Only places featuring 
 
 ![CLS collaborations 2018-2023, based on co-authored publications](figures/cls-network-globe.png)
 CLS collaborations 2018-2023, based on co-authored publications. Data and code for this figure in [cls-biblio-02-map.R](cls-biblio-02-map.R).
-
-![CLS collaborations 2018-2023, based on co-authored publications](figures/cls-network-globe.png)
-CLS collaborations 2018-2023, based on co-authored publications. Data and code for this figure in [cls-biblio-02-map.R](cls-biblio-02-map.R).
-
